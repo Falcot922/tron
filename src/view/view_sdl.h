@@ -1,20 +1,20 @@
-#ifndef SDLINTERFACE_H
-#define SDLINTERFACE_H
+#ifndef VIEW_SDL_H
+#define VIEW_SDL_H
 
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <SDL2/SDL_ttf.h>
-
 #include "model/model.h"
-#include "controller/control.h"
 
+// Interface graphique : ne fait que dessiner. Les événements sont gérés par le contrôleur.
 
-int initialisation_sdl();
-void destroy_start_button();
-void PrintPlateau(Model *model, int **plateau);
-void afficher_bouton_start();
-void afficher_bouton_restart();
+int sdl_ouvrir(int largeur, int hauteur); // 0 si la fenêtre et les images sont prêtes
+void sdl_fermer(void);
+
+void sdl_afficher_menu(void);
+// Plateau en cours ; si la partie est finie, ajoute le bouton restart et annonce le résultat
+void sdl_afficher_jeu(const Model *model, int **plateau, Gagnant resultat);
+
+// Emplacement des boutons, pour que le contrôleur sache où l'on clique
+SDL_Rect sdl_bouton_start(void);
+SDL_Rect sdl_bouton_restart(void);
 
 #endif

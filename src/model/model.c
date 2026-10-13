@@ -1,135 +1,113 @@
+#include <assert.h>
+#include <stdlib.h>
 #include "model.h"
 
-
-// Affichage du gagnant
-const char* gagnant_message(Gagnant resultat) {
+// Message de fin de partie
+const char *gagnant_message(Gagnant resultat) {
     switch (resultat) {
         case JOUEUR1: return "Le joueur 1 a gagné !";
         case JOUEUR2: return "Le joueur 2 a gagné !";
         case EGALITE: return "Égalité !";
-        case CONTINUER: return "";
-        default: return "Erreur inconnue.";
+        default: return "";
     }
 }
 
-
-// Création du plateau qui est sous forme de tableaux, ainsi que placement des motos et instanciation des motos 
-int **creationDuJeu(Moto *moto1, Moto *moto2, Model *model) {
-    int colonnes = model->colonnes;
-    int lignes = model->lignes;
-
-    int **plateau = malloc(lignes * sizeof(int*));
-    assert(plateau);
-
-    for (int i = 0; i < lignes; i++) {
-        plateau[i] = malloc(colonnes * sizeof(int));
-        assert(plateau[i]);
-    }
-
-    for (int i = 0; i < lignes; i++) {
-        for (int j = 0; j < colonnes; j++) {
+// Vide le plateau et replace les motos au départ. Sert à la création et pour rejouer :
+// le plateau n'est alloué qu'une fois par programme.
+void reinitialiser(int **plateau, Moto *moto1, Moto *moto2, const Model *model) {
+    for (int i = 0; i < model->lignes; i++) {
+        for (int j = 0; j < model->colonnes; j++) {
             plateau[i][j] = 0;
         }
     }
 
-    // On instancie les coordonnées des motos, ainsi que leur direction (choisis arbitrairement mais facilement modulable)
-    moto1->x = colonnes / 5;
-    moto1->y = lignes / 2;
+    // Positions et directions de départ (choisies arbitrairement, faciles à changer)
+    moto1->x = model->colonnes / 5;
+    moto1->y = model->lignes / 2;
     moto1->valeur = 1;
-    moto1->directions = HAUT;
+    moto1->directions = moto1->prochaine = HAUT;
 
-    moto2->x = (colonnes / 5) * 4;
-    moto2->y = lignes / 2;
+    moto2->x = (model->colonnes / 5) * 4;
+    moto2->y = model->lignes / 2;
     moto2->valeur = 2;
-    moto2->directions = BAS;
+    moto2->directions = moto2->prochaine = BAS;
 
-    // Les premières cases sont donc coloriés en fonction de la valeur
     plateau[moto1->y][moto1->x] = moto1->valeur;
     plateau[moto2->y][moto2->x] = moto2->valeur;
-    
+}
+
+// Création du plateau et placement des motos
+int **creationDuJeu(Moto *moto1, Moto *moto2, const Model *model) {
+    // en dessous de 5 colonnes, les deux motos partiraient de la même case
+    assert(model->lignes >= 1 && model->colonnes >= 5);
+
+    int **plateau = malloc(model->lignes * sizeof(int *));
+    assert(plateau);
+    for (int i = 0; i < model->lignes; i++) {
+        plateau[i] = malloc(model->colonnes * sizeof(int));
+        assert(plateau[i]);
+    }
+
+    reinitialiser(plateau, moto1, moto2, model);
     return plateau;
 }
 
-// Boucle principale, qui permet de connaitre en temps réel les évents et retourne quel joueur a gagné 
-void start_jeu(SDL_Window *window, SDL_Event *event, int **plateau, Moto *moto1, Moto *moto2, Model *model, int *game_started) {
-    int width, height;
-
-    // Tant que on peut avancer, on écoute les events
-    while (avancer(plateau, moto1, moto2, model) == CONTINUER) {
-        events_pendant_le_jeu(event, moto1, moto2, game_started, model, plateau);
-        usleep(40000);
-    }
-
-    // On print les joueurs (pour l'instant console, mais on peut l'afficher en haut dans la sdl par exmeple)
-    // problème au niveau de sdl_ttf pour aficher du texte donc impossible à faire
-    Gagnant winner = avancer(plateau, moto1, moto2, model);
-    if (winner == JOUEUR1) {
-        printf("Joueur bleu gagnant \n");
-    } else if (winner == JOUEUR2) {
-        printf("Joueur rouge gagnant \n");
-    } else {
-        printf("Égalité\n");
-    }
-        
-    afficher_bouton_restart();
-    SDL_GetWindowSize(window, &width, &height);
-}
-
-// Permet d'avancer les motos, si et seulement si c'est possible et que la partie ne se termine pas, si y'a un gagnant il est retourné (structure Gagnant)
-Gagnant avancer(int **plateau, Moto *moto1, Moto *moto2, Model *model) {
-    int retour = 0;
-
-
-    // on gère les directions de la moto 1
-    if (moto1->directions == HAUT && moto1->y > 0 && plateau[moto1->y - 1][moto1->x] == 0) {
-        moto1->y -= 1;
-    } else if (moto1->directions == BAS && moto1->y < model->lignes - 1 && plateau[moto1->y + 1][moto1->x] == 0) {
-        moto1->y += 1;
-    } else if (moto1->directions == DROITE && moto1->x < model->colonnes - 1 && plateau[moto1->y][moto1->x + 1] == 0) {
-        moto1->x += 1;
-    } else if (moto1->directions == GAUCHE && moto1->x > 0 && plateau[moto1->y][moto1->x - 1] == 0) {
-        moto1->x -= 1;
-    } else {
-        retour += 5; 
-    }
-
-    // on gère les directions de la moto 2
-    if (moto2->directions == HAUT && moto2->y > 0 && plateau[moto2->y - 1][moto2->x] == 0) {
-        moto2->y -= 1;
-    } else if (moto2->directions == BAS && moto2->y < model->lignes - 1 && plateau[moto2->y + 1][moto2->x] == 0) {
-        moto2->y += 1;
-    } else if (moto2->directions == DROITE && moto2->x < model->colonnes - 1 && plateau[moto2->y][moto2->x + 1] == 0) {
-        moto2->x += 1;
-    } else if (moto2->directions == GAUCHE && moto2->x > 0 && plateau[moto2->y][moto2->x - 1] == 0) {
-        moto2->x -= 1;
-    } else {
-        retour += 10;
-    }
-
-    // si l'une des motos a pour valeur la moto de l'autre et vice versa, alors égalité
-    if (moto1->x == moto2->x && moto1->y == moto2->y) {
-        return EGALITE;
-    }
-
-    // En fonction de l'incrémentation, on retourne qui a gagné
-    if (retour == 0) {
-        plateau[moto1->y][moto1->x] = moto1->valeur;
-        plateau[moto2->y][moto2->x] = moto2->valeur;
-    } else if (retour == 5) {
-        return JOUEUR2; 
-    } else if (retour == 10) {
-        return JOUEUR1;
-    } else if (retour == 15) {
-        return EGALITE; 
-    }
-
-    return CONTINUER;  
-}
-
-// Free du jeu
 void free_jeu(int **plateau, Model model) {
     for (int i = 0; i < model.lignes; i++) {
         free(plateau[i]);
     }
     free(plateau);
+}
+
+static int verticale(Directions direction) {
+    return direction == HAUT || direction == BAS;
+}
+
+// Demande de virage : seul un quart de tour est permis. On compare à la direction du dernier
+// déplacement, pas à la dernière demande : deux touches entre deux pas ne font pas un demi-tour.
+void tourner(Moto *moto, Directions direction) {
+    if (verticale(direction) != verticale(moto->directions)) {
+        moto->prochaine = direction;
+    }
+}
+
+// Avance la moto d'une case si elle est libre. Retourne 0 si elle est bloquée (mur ou trace).
+static int avancer_moto(int **plateau, Moto *moto, const Model *model) {
+    int x = moto->x, y = moto->y;
+    moto->directions = moto->prochaine;
+
+    switch (moto->directions) {
+        case HAUT: y -= 1; break;
+        case BAS: y += 1; break;
+        case GAUCHE: x -= 1; break;
+        case DROITE: x += 1; break;
+    }
+    if (x < 0 || x >= model->colonnes || y < 0 || y >= model->lignes || plateau[y][x] != 0) {
+        return 0;
+    }
+    moto->x = x;
+    moto->y = y;
+    return 1;
+}
+
+// Un pas de jeu : avance les deux motos et retourne CONTINUER, ou l'issue de la partie.
+// À n'appeler qu'une fois par pas : après une fin de partie, il faut reinitialiser().
+Gagnant avancer(int **plateau, Moto *moto1, Moto *moto2, const Model *model) {
+    int avance1 = avancer_moto(plateau, moto1, model);
+    int avance2 = avancer_moto(plateau, moto2, model);
+
+    // les deux motos bloquées, ou arrivées sur la même case
+    if ((!avance1 && !avance2) || (moto1->x == moto2->x && moto1->y == moto2->y)) {
+        return EGALITE;
+    }
+    if (!avance1) {
+        return JOUEUR2;
+    }
+    if (!avance2) {
+        return JOUEUR1;
+    }
+
+    plateau[moto1->y][moto1->x] = moto1->valeur;
+    plateau[moto2->y][moto2->x] = moto2->valeur;
+    return CONTINUER;
 }

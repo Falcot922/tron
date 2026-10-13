@@ -1,191 +1,156 @@
+#include <stdio.h>
+#include <SDL2/SDL.h>
+#include <ncurses.h>
 #include "control.h"
+#include "model/model.h"
+#include "view/view_sdl.h"
+#include "view/view_ncurses.h"
 
+// ─── SDL ───
 
-// Fonction qui s'active uniquement pendant que le jeu est en cours
-void events_pendant_le_jeu(SDL_Event *event, Moto *moto1, Moto *moto2, int *game_started, Model *model, int **plateau) {
-    while (SDL_PollEvent(event) && game_started) {
-        if (event->type == SDL_KEYDOWN) {
-            break;
-        }
-    }
-    PrintPlateau(model, plateau);
-    clavier_evenement(event->key.keysym.sym, moto1, moto2); // check si on peut changer de directions
-}
+#define SDL_LIGNES 100
+#define SDL_COLONNES 150
+#define SDL_PAS_MS 40
 
-// Capter les évents pour les boutons start/restart ainsi que si on quitte l'application
-void events(SDL_Window *window, SDL_Event *event, int *running, Moto *moto1, Moto *moto2, Model *model, int **plateau) {
-    int game_started = 0;
-    while (*running) {
-        while (SDL_PollEvent(event)) {
-            switch (event->type) {
-                case SDL_QUIT: // quitter
-                    *running = 0;
-                    break;
-                case SDL_MOUSEBUTTONDOWN: // clique quelque part
-                    clique_bouton_start(window, event, event->button.x, event->button.y, &game_started, moto1, moto2, plateau, model);
-                    clique_bouton_restart(window, event, event->button.x, event->button.y, moto1, moto2, plateau, model,&game_started);
-                    break;
-
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-}
-
-// Copie de la fonction SDL clavier_evenement() qui permet de détecter les events, et avancer sur le plateau
-int events_ncurses(Moto *moto1, Moto *moto2, int **plateau, Model *model) {
-    int ch = ERR;
-
-    nodelay(stdscr, TRUE);
-
-    if ((ch = getch()) != ERR) {
-        switch (ch) {
-            case 'z': 
-                if (moto1->directions == GAUCHE || moto1->directions == DROITE) {
-                    moto1->directions = HAUT;
-                }
-                break;
-            case 'q':
-                if (moto1->directions == HAUT || moto1->directions == BAS) {
-                    moto1->directions = GAUCHE;
-                }
-                break;
-            case 's': 
-                if (moto1->directions == GAUCHE || moto1->directions == DROITE) {
-                    moto1->directions = BAS;
-                }
-                break;
-            case 'd': 
-                if (moto1->directions == HAUT || moto1->directions == BAS) {
-                    moto1->directions = DROITE;
-                }
-                break;
-            case KEY_UP: 
-                if (moto2->directions == GAUCHE || moto2->directions == DROITE) {
-                    moto2->directions = HAUT;
-                }
-                break;
-            case KEY_DOWN: 
-                if (moto2->directions == GAUCHE || moto2->directions == DROITE) {
-                    moto2->directions = BAS;
-                }
-                break;
-            case KEY_LEFT: 
-                if (moto2->directions == HAUT || moto2->directions == BAS) {
-                    moto2->directions = GAUCHE;
-                }
-                break;
-            case KEY_RIGHT: 
-                if (moto2->directions == HAUT || moto2->directions == BAS) {
-                    moto2->directions = DROITE;
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    return avancer(plateau, moto1, moto2, model);
-}
-
-// évènements ncurses, avec conditions ternaires prcq c'est cool un coup 
-int menu_navigation_ncurses(int current_choice, int num_options) {
-    int key = getch(); 
+// Joueur 1 : ZQSD, joueur 2 : flèches
+static void clavier_sdl(SDL_Keycode key, Moto *moto1, Moto *moto2) {
     switch (key) {
-        case KEY_UP: 
-            current_choice = (current_choice == 0) ? num_options - 1 : current_choice - 1;
-            break;
-        case KEY_DOWN: 
-            current_choice = (current_choice == num_options - 1) ? 0 : current_choice + 1;
-            break;
-        case '\n': 
-            return -1; 
-        default:
-            break;
-    }
-    return current_choice;
-}
-
-// Savoir si le bouton restart a été cliqué, dans le cas positif alors ça relance une partie 
-void clique_bouton_restart(SDL_Window *window, SDL_Event *event, int mouseX, int mouseY, Moto *moto1, Moto *moto2, int **plateau, Model *model,int * game_started) {
-    int width, height;
-    SDL_GetWindowSize(window, &width, &height);
-
-    int buttonWidth = 200;
-    int buttonHeight = 100;
-    int buttonX = (width - buttonWidth) / 2;
-    int buttonY = height - buttonHeight - 25;
-
-    if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
-        free_jeu(plateau, *model);
-        plateau = creationDuJeu(moto1, moto2, model);
-        start_jeu(window, event, plateau, moto1, moto2, model, game_started);
+        case SDLK_z: tourner(moto1, HAUT); break;
+        case SDLK_q: tourner(moto1, GAUCHE); break;
+        case SDLK_s: tourner(moto1, BAS); break;
+        case SDLK_d: tourner(moto1, DROITE); break;
+        case SDLK_UP: tourner(moto2, HAUT); break;
+        case SDLK_LEFT: tourner(moto2, GAUCHE); break;
+        case SDLK_DOWN: tourner(moto2, BAS); break;
+        case SDLK_RIGHT: tourner(moto2, DROITE); break;
+        default: break;
     }
 }
 
+// Menu, puis parties à la suite : un clic sur start lance la première, un clic sur restart les suivantes
+void jouer_sdl(int largeur, int hauteur) {
+    if (sdl_ouvrir(largeur, hauteur) != 0) {
+        return;
+    }
 
-// Calculer les positions du bouton start, qui permet de savoir si il est cliqué ou pas, si oui ça détruit le bouton 
-void clique_bouton_start(SDL_Window *window, SDL_Event *event, int mouseX, int mouseY, int *game_started, Moto *moto1, Moto *moto2, int **plateau, Model *model) {
-    int width, height;
-    SDL_GetWindowSize(window, &width, &height);
+    Model model = { SDL_LIGNES, SDL_COLONNES };
+    Moto moto1, moto2;
+    int **plateau = creationDuJeu(&moto1, &moto2, &model);
 
-    int buttonWidth = 200;
-    int buttonHeight = 100;
-    int buttonX = (width - buttonWidth) / 2;
-    int buttonY = (height - buttonHeight) / 2;
+    enum { MENU, EN_JEU, FIN } etat = MENU;
+    sdl_afficher_menu();
 
-    if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
-        *game_started = 1;
-        destroy_start_button();
-        start_jeu(window, event, plateau, moto1, moto2, model, game_started);
+    SDL_Event event;
+    int running = 1;
+    while (running) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                running = 0;
+            } else if (event.type == SDL_KEYDOWN && etat == EN_JEU) {
+                clavier_sdl(event.key.keysym.sym, &moto1, &moto2);
+            } else if (event.type == SDL_MOUSEBUTTONDOWN && etat != EN_JEU) {
+                SDL_Point clic = { event.button.x, event.button.y };
+                SDL_Rect bouton = etat == MENU ? sdl_bouton_start() : sdl_bouton_restart();
+                if (SDL_PointInRect(&clic, &bouton)) {
+                    reinitialiser(plateau, &moto1, &moto2, &model);
+                    etat = EN_JEU;
+                }
+            }
+        }
+
+        if (etat == EN_JEU) {
+            Gagnant resultat = avancer(plateau, &moto1, &moto2, &model);
+            sdl_afficher_jeu(&model, plateau, resultat);
+            if (resultat != CONTINUER) {
+                printf("%s\n", gagnant_message(resultat));
+                etat = FIN;
+            }
+        }
+        SDL_Delay(SDL_PAS_MS);
+    }
+
+    free_jeu(plateau, model);
+    sdl_fermer();
+}
+
+// ─── ncurses ───
+
+#define NCURSES_COTE 25 // plateau de 25 x 25 au plus, réduit si le terminal est plus petit
+#define NCURSES_PAS_MS 200
+
+static void clavier_ncurses(int touche, Moto *moto1, Moto *moto2) {
+    switch (touche) {
+        case 'z': tourner(moto1, HAUT); break;
+        case 'q': tourner(moto1, GAUCHE); break;
+        case 's': tourner(moto1, BAS); break;
+        case 'd': tourner(moto1, DROITE); break;
+        case KEY_UP: tourner(moto2, HAUT); break;
+        case KEY_LEFT: tourner(moto2, GAUCHE); break;
+        case KEY_DOWN: tourner(moto2, BAS); break;
+        case KEY_RIGHT: tourner(moto2, DROITE); break;
+        default: break;
     }
 }
 
-// Switch case qui permet de savoir si on peut se déplacer, en fonction de la position actuelle
-void clavier_evenement(SDL_Keycode key, Moto *moto1, Moto *moto2) {
-    switch (key) {
-        case SDLK_z:
-            if (moto1->directions == GAUCHE || moto1->directions == DROITE) {
-                moto1->directions = HAUT;
-            }
-            break;
-        case SDLK_q:
-            if (moto1->directions == HAUT || moto1->directions == BAS) {
-                moto1->directions = GAUCHE;
-            }
-            break;
-        case SDLK_s:
-            if (moto1->directions == GAUCHE || moto1->directions == DROITE) {
-                moto1->directions = BAS;
-            }
-            break;
-        case SDLK_d:
-            if (moto1->directions == HAUT || moto1->directions == BAS) {
-                moto1->directions = DROITE;
-            }
-            break;
-        case SDLK_UP:
-            if (moto2->directions == GAUCHE || moto2->directions == DROITE) {
-                moto2->directions = HAUT;
-            }
-            break;
-        case SDLK_DOWN:
-            if (moto2->directions == DROITE || moto2->directions == GAUCHE) {
-                moto2->directions = BAS;
-            }
-            break;
-        case SDLK_LEFT:
-            if (moto2->directions == HAUT || moto2->directions == BAS) {
-                moto2->directions = GAUCHE;
-            }
-            break;
-        case SDLK_RIGHT:
-            if (moto2->directions == HAUT || moto2->directions == BAS) {
-                moto2->directions = DROITE;
-            }
-            break;
-        default:
-            break;
+// Retourne l'option validée avec Entrée
+static int menu_ncurses(void) {
+    int choix = MENU_LANCER;
+    for (;;) {
+        ncurses_afficher_menu(choix);
+        switch (getch()) {
+            case KEY_UP: choix = (choix + MENU_NB_CHOIX - 1) % MENU_NB_CHOIX; break;
+            case KEY_DOWN: choix = (choix + 1) % MENU_NB_CHOIX; break;
+            case '\n':
+            case KEY_ENTER: return choix;
+            default: break;
+        }
     }
+}
+
+// Une partie : retourne son issue
+static Gagnant partie_ncurses(int **plateau, Moto *moto1, Moto *moto2, const Model *model) {
+    Gagnant resultat = CONTINUER;
+    erase();
+    nodelay(stdscr, TRUE); // getch ne bloque plus : le jeu avance même sans touche
+    while (resultat == CONTINUER) {
+        ncurses_afficher_plateau(plateau, model);
+        napms(NCURSES_PAS_MS);
+        int touche;
+        while ((touche = getch()) != ERR) {
+            clavier_ncurses(touche, moto1, moto2);
+        }
+        resultat = avancer(plateau, moto1, moto2, model);
+    }
+    nodelay(stdscr, FALSE);
+    return resultat;
+}
+
+void jouer_ncurses(void) {
+    ncurses_ouvrir();
+
+    Model model = { LINES < NCURSES_COTE ? LINES : NCURSES_COTE, COLS / 2 < NCURSES_COTE ? COLS / 2 : NCURSES_COTE };
+    if (model.lignes < 5 || model.colonnes < 5) {
+        ncurses_fermer();
+        fprintf(stderr, "Terminal trop petit pour jouer.\n");
+        return;
+    }
+
+    if (menu_ncurses() == MENU_LANCER) {
+        Moto moto1, moto2;
+        int **plateau = creationDuJeu(&moto1, &moto2, &model);
+
+        int touche;
+        do {
+            reinitialiser(plateau, &moto1, &moto2, &model);
+            ncurses_afficher_fin(partie_ncurses(plateau, &moto1, &moto2, &model));
+            do {
+                touche = getch();
+            } while (touche != 'o' && touche != 'n');
+        } while (touche == 'o');
+
+        free_jeu(plateau, model);
+    }
+
+    ncurses_afficher_au_revoir();
+    ncurses_fermer();
 }

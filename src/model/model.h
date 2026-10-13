@@ -1,34 +1,30 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <unistd.h>
-#include "view/view_sdl.h"
-#include "controller/control.h"
-
 #ifndef MODEL_H
 #define MODEL_H
 
-typedef enum Directions {HAUT,BAS,GAUCHE,DROITE} Directions;
-typedef enum GAGNANT {JOUEUR1,JOUEUR2,CONTINUER,EGALITE} Gagnant;
+// Le modèle : les règles du jeu et rien d'autre. Il ne connaît ni SDL ni ncurses,
+// ce qui permet de le brancher sur n'importe quelle interface et de le tester seul.
 
+typedef enum Directions {HAUT, BAS, GAUCHE, DROITE} Directions;
+typedef enum Gagnant {JOUEUR1, JOUEUR2, CONTINUER, EGALITE} Gagnant;
 
 typedef struct Moto {
-    int x,y;
-    Directions directions;
-    int valeur;
+    int x, y;
+    Directions directions; // direction du dernier déplacement
+    Directions prochaine;  // direction demandée par le joueur, appliquée au prochain déplacement
+    int valeur;            // ce que la moto écrit sur le plateau (1 ou 2)
 } Moto;
 
-
 typedef struct Model {
-    int lignes,colonnes;
+    int lignes, colonnes;
 } Model;
 
-
-const char* gagnant_message(Gagnant resultat);
-int ** creationDuJeu(Moto * moto1,Moto * moto2,Model * model);
-void start_jeu(SDL_Window * window,SDL_Event * event,int **plateau, Moto * moto1,Moto * moto2,Model * model,int *game_started);
-Gagnant avancer(int **plateau, Moto *moto1, Moto *moto2,Model * model);
+// Le plateau est un tableau lignes x colonnes : 0 = case libre, sinon la valeur de la moto passée par là
+int **creationDuJeu(Moto *moto1, Moto *moto2, const Model *model);
+void reinitialiser(int **plateau, Moto *moto1, Moto *moto2, const Model *model);
 void free_jeu(int **plateau, Model model);
-const char* gagnant_message(Gagnant resultat);
+
+void tourner(Moto *moto, Directions direction);
+Gagnant avancer(int **plateau, Moto *moto1, Moto *moto2, const Model *model);
+const char *gagnant_message(Gagnant resultat);
 
 #endif

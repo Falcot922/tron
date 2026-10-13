@@ -1,54 +1,38 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <view/view_sdl.h>
-#include <view/view_ncurses.h>
+#include "controller/control.h"
+
+static int usage(const char *programme) {
+    fprintf(stderr, "Usage : %s [-sdl | -ncurse] [-taille <hauteur> <largeur>]\n", programme);
+    return EXIT_FAILURE;
+}
 
 int main(int argc, char *argv[]) {
-    char choix = ' ';
-    int width = 600, height = 500; // Taille par défaut pour SDL
+    int ncurses = 0;
+    int hauteur = 600, largeur = 500; // fenêtre SDL par défaut
 
-    // Gestion des paramètres
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-ncurse") == 0) {
-            choix = 'n';
+        if (strcmp(argv[i], "-ncurse") == 0 || strcmp(argv[i], "-ncurses") == 0) {
+            ncurses = 1;
         } else if (strcmp(argv[i], "-sdl") == 0) {
-            choix = 's';
+            ncurses = 0;
         } else if (strcmp(argv[i], "-taille") == 0 && i + 2 < argc) {
-            width = atoi(argv[i + 1]);
-            height = atoi(argv[i + 2]);
+            hauteur = atoi(argv[i + 1]);
+            largeur = atoi(argv[i + 2]);
             i += 2;
+            if (hauteur <= 0 || largeur <= 0) {
+                return usage(argv[0]);
+            }
+        } else {
+            return usage(argv[0]);
         }
     }
 
-    if (choix == 's' || choix == ' ') {
-        initialisation_sdl(width, height);
-
-    } else if (choix == 'n') {
-        // calcul de la taille pour ncurses
-        width = width / 10;
-        height = height / 10;
-        if (width < 50 || height < 50) {
-            width = 50;
-            height = 50;
-        }
-        
-        int menu_choice = display_menu();
-        switch (menu_choice) {
-            case 0:
-                initialisation_ncurses(height, width);
-                break;
-            case 1: 
-                printf("Merci d'avoir joué !\n");
-                break;
-            default:
-                printf("Choix invalide.\n");
-                break;
-        }
-
+    if (ncurses) {
+        jouer_ncurses();
     } else {
-        printf("Option non valide. Veuillez utiliser -ncurse ou -sdl.\n");
+        jouer_sdl(largeur, hauteur);
     }
-
-    return 0;
+    return EXIT_SUCCESS;
 }
